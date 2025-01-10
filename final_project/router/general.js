@@ -5,8 +5,12 @@ let users = require("./auth_users.js").users;
 const public_users = express.Router();
 const usersList = [];
 
-public_users.post("/register", (req,res) => {
-  const { username, password } = req.body;  // Destructure username and password from the request body
+// A secret key to sign JWTs (In real applications, store this securely, not in the code)
+const JWT_SECRET = 'your_secret_key';
+
+// Route for user registration
+app.post('/register', function (req, res) {
+  const { username, password } = req.body;
 
   // Validate input
   if (!username || !password) {
@@ -19,12 +23,42 @@ public_users.post("/register", (req,res) => {
     return res.status(400).json({ message: "Username already exists" });
   }
 
+  // Hash the password before saving (in real apps)
+  const hashedPassword = bcrypt.hashSync(password, 10);
+
   // Create new user and add to the mock database
-  const newUser = { username, password };
+  const newUser = { username, password: hashedPassword };
   usersList.push(newUser);
 
   // Respond with success message
   res.status(201).json({ message: "User registered successfully" });
+});
+
+// Route for user login
+app.post('/customer/login', function (req, res) {
+  const { username, password } = req.body;
+
+  // Validate input
+  if (!username || !password) {
+    return res.status(400).json({ message: "Username and password are required" });
+  }
+
+  // Find the user from the database
+  const user = usersList.find(user => user.username === username);
+  if (!user) {
+    return res.status(401).json({ message: "Invalid username or password" });
+  }
+
+  // Compare the provided password with the stored hash
+  if (!bcrypt.compareSync(password, user.password)) {
+    return res.status(401).json({ message: "Invalid username or password" });
+  }
+
+  // Generate a JWT for the authenticated user
+  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+
+  // Respond with the JWT
+  res.status(200).json({ message: "Login successful", token });
 });
 
 // Get the book list available in the shop
@@ -37,7 +71,7 @@ public_users.get('/',function (req, res) {
 // Get book details based on ISBN
 public_users.get('/isbn/:isbn',function (req, res) {
   const { isbn } = req.params;  // Retrieve the ISBN from the request parameters
-  const book = books.find(b => b.isbn === isbn);  // Find the book with the matching ISBN
+  const book = Object.values(books).find(b => b.isbn === isbn);
 
   if (book) {
     res.json(book);  // Return the book details as a JSON response
@@ -51,7 +85,7 @@ public_users.get('/author/:author',function (req, res) {
    const { author } = req.params;  // Retrieve the author from the request parameters
   
   // Find all books that match the provided author
-  const booksByAuthor = books.filter(b => b.author.toLowerCase() === author.toLowerCase());
+  const booksByAuthor = Object.values(books).filter(b => b.author.toLowerCase() === author.toLowerCase());
   
   if (booksByAuthor.length > 0) {
     res.json(booksByAuthor);  // Return the list of books written by the author
@@ -65,7 +99,7 @@ public_users.get('/title/:title',function (req, res) {
   const { title } = req.params;  // Retrieve the title from the request parameters
   
   // Find all books that match the provided title
-  const booksByTitle = books.filter(b => b.title.toLowerCase().includes(title.toLowerCase()));
+  const booksByTitle = Object.values(books).filter(b => b.title.toLowerCase().includes(title.toLowerCase()));
   
   if (booksByTitle.length > 0) {
     res.json(booksByTitle);  // Return the list of books that match the title
@@ -79,7 +113,7 @@ public_users.get('/review/:isbn',function (req, res) {
   const { isbn } = req.params;  // Retrieve the ISBN from the request parameters
   
   // Find the book by ISBN
-  const book = books.find(b => b.isbn === isbn);
+  const book = Object.values(books).find(b => b.isbn === isbn);
   
   if (book) {
     // If the book is found, return the reviews
